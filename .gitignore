@@ -4,7 +4,6 @@ logs/*
 node_modules
 .parcel-cache
 
-helix-importer-ui
 .DS_Store
 *.bak
 .idea
