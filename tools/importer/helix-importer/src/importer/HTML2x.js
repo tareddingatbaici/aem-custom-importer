@@ -192,6 +192,12 @@ async function html2x(
       const docx = await storageHandler.get(pir.docx);
       res.docx = docx;
     }
+
+    if (config.toXml && pir.xml) {
+      const xml = await storageHandler.get(pir.xml);
+      res.xml = xml;
+    }
+
     return res;
   };
 
@@ -253,6 +259,8 @@ async function html2xml(url, document, transformCfg, config, params = {}) {
   if (typeof doc === 'string') {
     doc = parseStringDocument(document, config);
   }
+
+
   return html2x(url, doc, transformCfg, { ...config, toMd: true, toXml: true }, params);
 }
 

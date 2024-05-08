@@ -16,9 +16,11 @@ import path from 'path';
 import { unified } from 'unified';
 import parse from 'rehype-parse';
 import { defaultHandlers, toMdast } from 'hast-util-to-mdast';
+import { toXast } from 'hast-util-to-xast';
 import stringify from 'remark-stringify';
 import fs from 'fs-extra';
 import { md2docx } from '@adobe/helix-md2docx';
+import { default as md2xml } from '../../../helix-md2xml/src/md2xml/index.js';
 import remarkGridTable from '@adobe/remark-gridtables';
 import {
   imageReferences,
@@ -205,6 +207,133 @@ export default class PageImporter {
       content: md,
     };
   }
+
+  async createXml(resource, url) {
+      console.log("createXml has been called...");
+      const { name } = resource;
+      const { directory } = resource;
+      const sanitizedName = FileUtils.sanitizeFilename(name);
+      this.logger.log(`Computing Xml for ${directory}/${sanitizedName}`);
+
+      const html = resource.document.innerHTML;
+      const hast = await unified()
+        .use(parse, { emitParseErrors: true })
+        .parse(html);
+
+      const xast = toXast(hast, {
+        handlers: {
+          ...defaultHandlers,
+          u: (state, node) => formatNode('underline', state, node),
+          sub: (state, node) => formatNode('subscript', state, node),
+          sup: (state, node) => formatNode('superscript', state, node),
+          ...gridtableHandlers,
+        },
+      });
+
+      // cleanup mdast similar to docx2md
+      /**
+      await sanitizeHeading(mdast);
+      await sanitizeLinks(mdast);
+      await sanitizeTextAndFormats(mdast);
+      await suppressSpaceCode(mdast);
+      await imageReferences(mdast);
+        */
+      let xml = await unified()
+        .use(stringify, {
+          strong: '*',
+          emphasis: '_',
+          bullet: '-',
+          fence: '`',
+          fences: true,
+          incrementListMarker: true,
+          rule: '-',
+          ruleRepetition: 3,
+          ruleSpaces: false,
+        })
+        .use(remarkGridTable)
+        .use(remarkGfmNoLink)
+        .use(formatPlugin) // this converts the `underline` and `subscript` back to tags in the md.
+        .stringify(xast);
+        /**
+      // process image links
+      // TODO: this can be done easier in the MDAST tree
+      const { document } = resource;
+      const assets = [];
+      const imgs = document.querySelectorAll('img');
+      imgs.forEach((img) => {
+        const { src } = img;
+        const isEmbed = img.classList.contains('hlx-embed');
+        if (!isEmbed && src && src !== '' && (md.indexOf(src) !== -1 || md.indexOf(decodeURI(src)) !== -1)) {
+          assets.push({
+            url: src,
+            append: '#image.png',
+          });
+        }
+      });
+
+      const as = document.querySelectorAll('a');
+      as.forEach((a) => {
+        const { href } = a;
+        try {
+          if ((href && href !== '' && md.indexOf(href) !== -1) || md.indexOf(decodeURI(href)) !== -1) {
+            const u = new URL(href, url);
+            const ext = path.extname(u.href);
+            if (ext === '.mp4') {
+              // upload mp4
+              assets.push({
+                url: href,
+                append: '#image.mp4',
+              });
+            }
+          }
+        } catch (error) {
+          this.logger.warn(`Invalid link in the page - ${href}`, error);
+        }
+      });
+
+      const vs = document.querySelectorAll('video source');
+      vs.forEach((s) => {
+        const { src } = s;
+        if ((src && src !== '' && md.indexOf(src) !== -1) || md.indexOf(decodeURI(src)) !== -1) {
+          try {
+            const u = new URL(src, url);
+            const ext = path.extname(u.href);
+            if (ext === '.mp4') {
+              const poster = s.parentNode.getAttribute('poster');
+              if (poster) {
+                assets.push({
+                  url: poster,
+                });
+              }
+              // upload mp4
+              assets.push({
+                url: src,
+                append: '#image.mp4',
+              });
+            }
+          } catch (error) {
+            this.logger.warn(`Invalid video in the page: ${src}`, error);
+          }
+        }
+      });
+
+      // adjust assets url (from relative to absolute)
+      assets.forEach((asset) => {
+        const u = new URL(decodeURI(asset.url), url);
+        md = MDUtils.replaceSrcInMarkdown(md, asset.url, u.toString());
+      });
+
+      if (resource.prepend) {
+        md = resource.prepend + md;
+      }
+
+      md = this.postProcessMD(md);
+      */
+      return {
+        path: path.join(directory, sanitizedName),
+        content: xml,
+      };
+    }
 
   cleanup(document) {
     DOMUtils.remove(document, ['script', 'hr']);
